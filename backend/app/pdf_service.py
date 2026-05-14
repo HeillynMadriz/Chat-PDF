@@ -1,32 +1,31 @@
-import uuid
-from io import BytesIO
+import io
 from pypdf import PdfReader
+# ¡Aquí está la corrección! Usamos langchain_text_splitters
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS
 
-document_store = {}
+# Inicializamos el modelo local que convertirá texto a números
+embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
-async def process_pdf(file_bytes: bytes, filename: str) -> dict:
-    reader = PdfReader(BytesIO(file_bytes))
-    
-    text = ""
-    num_pages = len(reader.pages)
-    
+async def extract_text_from_pdf(file_bytes: bytes):
+    # Extraer texto crudo del PDF
+    reader = PdfReader(io.BytesIO(file_bytes))
+    raw_text = ""
     for page in reader.pages:
-        extracted = page.extract_text()
-        if extracted:
-            text += extracted + "\n"
-    
-    # Generamos un ID único (document_id)
-    doc_id = str(uuid.uuid4())
-    
-    # Guardamos el texto asociado al ID en nuestro "almacenamiento"
-    document_store[doc_id] = {
-        "filename": filename,
-        "content": text
-    }
-    
-    return {
-        "document_id": doc_id,
-        "filename": filename,
-        "status": "processed",
-        "pages": num_pages
-    }
+        text = page.extract_text()
+        if text:
+            raw_text += text + "\n"
+            
+    # Picar el texto en Chunks
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=200, 
+        length_function=len
+    )
+    chunks = text_splitter.split_text(raw_text)
+
+    # Convertir a Vectores y guardar en FAISS
+    vectorstore = FAISS.from_texts(chunks, embeddings)
+
+    return vectorstore
