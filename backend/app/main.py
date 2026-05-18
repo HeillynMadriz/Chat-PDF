@@ -18,49 +18,84 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Diccionario en memoria para almacenar la base de datos vectorial de cada documento
+# Diccionario en memoria para almacenar la base de datos vectorial
 document_store = {}
 
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
 
+
 @app.post("/upload-pdf")
 async def upload_pdf(file: UploadFile = File(...)):
-    # Volvemos a la validación por extensión que es 100% segura
-    if not file.filename.lower().endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="El archivo debe ser un PDF válido.")
-    
+
+    # Validar extensión
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(
+            status_code=400,
+            detail="El archivo debe ser un PDF válido."
+        )
+
     file_bytes = await file.read()
-    
-    # Extraemos el texto y creamos los vectores
-    vectorstore = await extract_text_from_pdf(file_bytes)
-    
+
+    try:
+        # Procesar PDF
+        vectorstore = await extract_text_from_pdf(file_bytes)
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Ocurrió un error al procesar el PDF."
+        )
+
     document_id = str(uuid.uuid4())
-    
-    # Guardamos la base de datos vectorial de este documento
+
+    # Guardar vectorstore
     document_store[document_id] = {
         "vectorstore": vectorstore,
         "filename": file.filename
     }
-    
-    return {"document_id": document_id, "message": "PDF procesado exitosamente"}
+
+    return {
+        "document_id": document_id,
+        "message": "PDF procesado exitosamente"
+    }
+
 
 @app.post("/chat")
 async def chat_with_pdf(request: ChatRequest):
+
+    # Verificar documento
     if request.document_id not in document_store:
-        raise HTTPException(status_code=404, detail="Documento no encontrado. Por favor, súbelo de nuevo.")
-    
-    # 1. Recuperamos la base de datos vectorial del documento
+        raise HTTPException(
+            status_code=404,
+            detail="Documento no encontrado. Por favor, súbelo de nuevo."
+        )
+
+    # Recuperar vectorstore
     vectorstore = document_store[request.document_id]["vectorstore"]
-    
-    # 2. MAGIA: Buscamos matemáticamente los 4 fragmentos que más se parecen a la pregunta
-    relevant_docs = vectorstore.similarity_search(request.question, k=4)
-    
-    # 3. Unimos solo esos 4 pedacitos para dárselos a la IA
-    doc_context = "\n\n---\n\n".join([doc.page_content for doc in relevant_docs])
-    
-    # 4. Enviamos la pregunta junto con el contexto hiper-reducido
+
+    # Buscar fragmentos relacionados
+    docs_and_scores = vectorstore.similarity_search_with_score(
+        request.question,
+        k=4
+    )
+
+    # Extraer solo documentos
+    relevant_docs = [doc for doc, score in docs_and_scores]
+
+    # Construir contexto
+    doc_context = "\n\n---\n\n".join(
+        [doc.page_content for doc in relevant_docs]
+    )
+
+    # Enviar respuesta streaming
     return StreamingResponse(
         stream_openrouter(doc_context, request.question),
         media_type="text/event-stream"

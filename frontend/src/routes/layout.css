@@ -1,3 +1,26 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
+
+body {
+    font-family: 'Nunito', sans-serif;
+}
+
+.icon {
+    color: #475569;
+}
+
+:global(.dark) .icon {
+    color: #e4e9f0;
+}
+html, body {
+    height: 100%;
+    margin: 0;
+}
+
+body {
+    background: linear-gradient(135deg, #f8fafc, #e2e8f0);
+}
+.dark body {
+    background: linear-gradient(135deg, #0f172a, #020617);
+}

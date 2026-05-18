@@ -9,13 +9,24 @@ from langchain_community.vectorstores import FAISS
 embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
 async def extract_text_from_pdf(file_bytes: bytes):
+
     # Extraer texto crudo del PDF
     reader = PdfReader(io.BytesIO(file_bytes))
+
     raw_text = ""
+
     for page in reader.pages:
         text = page.extract_text()
+
         if text:
             raw_text += text + "\n"
+
+    # Validar PDF vacío o sin texto
+    if not raw_text.strip():
+        raise ValueError(
+            "El PDF no contiene texto legible."
+        )
+
             
     # Picar el texto en Chunks
     text_splitter = RecursiveCharacterTextSplitter(

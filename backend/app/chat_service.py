@@ -13,9 +13,19 @@ client = AsyncOpenAI(
 )
 
 async def ask_openrouter(document_context: str, user_question: str) -> str:
-    prompt = f"""Eres un asistente que responde preguntas únicamente usando el contenido del PDF proporcionado.
 
-Contenido del PDF:
+    prompt = f"""
+Eres un asistente especializado en responder preguntas sobre documentos PDF.
+
+Usa el contexto proporcionado como fuente principal de información.
+
+Si el contexto no contiene suficiente detalle para responder completamente,
+puedes complementar con conocimiento general relacionado directamente con el tema del documento únicamente si ayuda a explicar mejor información presente en el PDF.
+
+No inventes información.
+
+Si la pregunta no está relacionada con el documento, indícalo claramente.
+
 ---
 {document_context}
 ---
@@ -25,23 +35,52 @@ Pregunta del usuario:
 
 Instrucciones:
 - Responde en español.
-- Si la respuesta no está en el PDF, indica que no hay suficiente información.
-- No inventes datos.
-- Sé claro y directo."""
+- Usa el PDF como fuente principal.
+- Solo responde preguntas claramente relacionadas con el tema principal del documento.
+- Puedes complementar con conocimiento general únicamente si ayuda a explicar mejor información presente en el PDF.
+- No respondas preguntas ambiguas, demasiado generales o que no estén directamente relacionadas con el contenido del documento.
+- No asumas que nombres ambiguos o incompletos se refieren a personas mencionadas en el documento.
+- Si una pregunta es ambigua o no tiene relación clara con el PDF, pide aclaración o indica amablemente que no parece relacionada con el documento.
+- No inventes información.
+- Sé claro, útil y amable.
+"""
 
-    response = await client.chat.completions.create(
-        model=os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini"),
-        messages=[{"role": "user", "content": prompt}],
-    )
+    try:
 
-    return response.choices[0].message.content or ""
+        response = await client.chat.completions.create(
+            model=os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini"),
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+        )
 
+        return response.choices[0].message.content or ""
 
-# --- NUEVA FUNCIÓN PARA STREAMING ---
-async def stream_openrouter(document_context: str, user_question: str):
-    prompt = f"""Eres un asistente que responde preguntas únicamente usando el contenido del PDF proporcionado.
+    except Exception:
+        return "Ocurrió un error al generar la respuesta."
 
-Contenido del PDF:
+# ---------------- STREAMING ---------------- #
+
+async def stream_openrouter(
+    document_context: str,
+    user_question: str
+):
+
+    prompt = f"""
+Eres un asistente especializado en responder preguntas sobre documentos PDF.
+
+Usa el contexto proporcionado como fuente principal de información.
+
+Si el contexto no contiene suficiente detalle para responder completamente,
+puedes complementar con conocimiento general relacionado directamente con el tema del documento únicamente si ayuda a explicar mejor información presente en el PDF.
+
+No inventes información.
+
+Si la pregunta no está relacionada con el documento, indícalo claramente.
+
 ---
 {document_context}
 ---
@@ -51,17 +90,38 @@ Pregunta del usuario:
 
 Instrucciones:
 - Responde en español.
-- Si la respuesta no está en el PDF, indica que no hay suficiente información.
-- No inventes datos.
-- Sé claro y directo."""
+- Usa el PDF como fuente principal.
+- Solo responde preguntas claramente relacionadas con el tema principal del documento.
+- Puedes complementar con conocimiento general únicamente si ayuda a explicar mejor información presente en el PDF.
+- No respondas preguntas ambiguas, demasiado generales o que no estén directamente relacionadas con el contenido del documento.
+- No asumas que nombres ambiguos o incompletos se refieren a personas mencionadas en el documento.
+- Si una pregunta es ambigua o no tiene relación clara con el PDF, pide aclaración o indica amablemente que no parece relacionada con el documento.
+- No inventes información.
+- Sé claro, útil y amable.
+"""
 
-    response = await client.chat.completions.create(
-        model=os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini"),
-        messages=[{"role": "user", "content": prompt}],
-        stream=True, 
-    )
+    try:
 
-    async for chunk in response:
-        content = chunk.choices[0].delta.content
-        if content:
-            yield content
+        response = await client.chat.completions.create(
+            model=os.getenv(
+                "OPENROUTER_MODEL",
+                "openai/gpt-4o-mini"
+            ),
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            stream=True,
+        )
+
+        async for chunk in response:
+
+            content = chunk.choices[0].delta.content
+
+            if content:
+                yield content
+
+    except Exception:
+        yield "Ocurrió un error al generar la respuesta."
